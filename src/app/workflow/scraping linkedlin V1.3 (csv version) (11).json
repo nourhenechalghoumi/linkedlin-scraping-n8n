@@ -1,0 +1,795 @@
+{
+  "name": "scraping linkedlin V1.3 (csv version)",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "205690e7-c532-45e4-92c8-c3bd21b44c58",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        -7712,
+        3744
+      ],
+      "id": "ed04ee80-d9ac-4aa3-8f9f-471d02111b0a",
+      "name": "Webhook1",
+      "webhookId": "205690e7-c532-45e4-92c8-c3bd21b44c58",
+      "notes": "Point d'entrée du workflow - Reçoit les données POST contenant la liste des entreprises à rechercher. Attend un tableau d'objets avec les champs: Company Name, Region, et Max Results."
+    },
+    {
+      "parameters": {
+        "jsCode": "const inputData = $input.first().json;\n\n// Process input CSV data\nconst companiesArray = Array.isArray(inputData.body) ? inputData.body : \n                     Array.isArray(inputData.body.body) ? inputData.body.body : \n                     [inputData.body];\n\nif (!Array.isArray(companiesArray)) {\n  throw new Error('Expected an array of companies');\n}\n\nconst allCompanies = companiesArray.map(company => ({\n  companyName: company[\"Company Name\"]?.trim() || company[\"companyName\"]?.trim(),\n  region: company[\"Region\"]?.trim() || company[\"region\"]?.trim(),\n  maxResults: parseInt(company[\"Max Results\"] || company[\"maxResults\"] || 20),\n  currentStartIndex: 1\n}));\n\nreturn allCompanies.map(company => ({\n  json: {\n    ...company,\n    allCompanies: allCompanies,\n    allResults: []\n  }\n}));"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -7504,
+        3744
+      ],
+      "id": "8d803953-b87f-4b32-a4ec-c62c71cd4717",
+      "name": "Process Input1",
+      "notes": "Traite les données d'entrée: \n1. Normalise la structure des données (peut venir de différentes sources)\n2. Valide que c'est un tableau d'entreprises\n3. Crée un objet standardisé pour chaque entreprise avec: nom, région, max résultats\n4. Initialise les paramètres de pagination (startIndex=1)"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "name": "companyName",
+              "value": "={{ $json.companyName }}",
+              "type": "string",
+              "id": "9a61427e-7a8c-4fd1-8370-04ff8e44c0cb"
+            },
+            {
+              "name": "region",
+              "value": "={{ $json.region }}",
+              "type": "string",
+              "id": "f2da7529-9961-44e9-b8f7-888838566669"
+            },
+            {
+              "name": "maxResults",
+              "value": "={{ $json.maxResults }}",
+              "type": "number",
+              "id": "ac7292a0-921f-4130-971b-a3e8a54a5692"
+            },
+            {
+              "name": "currentStartIndex",
+              "value": "={{ $json.currentStartIndex }}",
+              "type": "number",
+              "id": "f0fddc69-49ca-45b3-add8-18ac3c4be9e3"
+            },
+            {
+              "id": "55cb16e0-0161-47f4-9d6b-4c9b8f866af1",
+              "name": "allCompanies",
+              "value": "={{ $json.allCompanies }}",
+              "type": "string"
+            },
+            {
+              "id": "7ced36cf-23f0-4325-8acb-1dd547edd3f6",
+              "name": "allResults",
+              "value": "={{ $json.allResults || [] }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "name": "Set Parameters1",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        -7168,
+        3920
+      ],
+      "id": "f9ffba2f-45df-4c22-9bf2-51c039ad8aa5",
+      "notes": "Définit les paramètres globaux du workflow:\n- Nom de l'entreprise et région pour la recherche\n- Paramètres de pagination (maxResults, currentStartIndex)\n- Stocke la liste complète des entreprises (allCompanies)\n- Initialise le tableau pour collecter tous les résultats (allResults)"
+    },
+    {
+      "parameters": {
+        "url": "https://www.googleapis.com/customsearch/v1",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "key",
+              "value": "AIzaSyA18AN6G24M4dDQjL6hocUhrXSaz6nW6e0"
+            },
+            {
+              "name": "cx",
+              "value": "320c57479ec794216"
+            },
+            {
+              "name": "q",
+              "value": "={{$node[\"Set Parameters1\"].json.companyName}} {{$node[\"Set Parameters1\"].json.region}} site:linkedin.com/in"
+            },
+            {
+              "name": "start",
+              "value": "={{$node[\"Set Parameters1\"].json.currentStartIndex}}"
+            },
+            {
+              "name": "num",
+              "value": "={{Math.min(10, $node[\"Set Parameters1\"].json.maxResults - $node[\"Set Parameters1\"].json.currentStartIndex + 1)}}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "name": "Search LinkedIn Profiles1",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -6960,
+        3920
+      ],
+      "id": "98010d74-40e9-4849-95c7-ac467f71f6d9",
+      "notes": "Effectue la recherche sur LinkedIn via Google Custom Search API:\n- Combine nom entreprise + région + 'site:linkedin.com/in'\n- Gère la pagination (paramètres start et num)\n- Limite à 10 résultats par requête (max de l'API)\n- Utilise les credentials Google API (key et cx)"
+    },
+    {
+      "parameters": {
+        "jsCode": "const response = $input.first().json;\nconst companyName = $node[\"Set Parameters1\"].json.companyName || '';\nconst region = $node[\"Set Parameters1\"].json.region || '';\n\n// Pagination logic\nlet nextStartIndex = $node[\"Set Parameters1\"].json.currentStartIndex;\nif (response.queries?.nextPage?.[0]?.startIndex) {\n  nextStartIndex = response.queries.nextPage[0].startIndex;\n}\nconst hasMoreResults = nextStartIndex <= $node[\"Set Parameters1\"].json.maxResults;\n\n// Process items\nconst items = response.items || [];\nif (items.length === 0) {\n  return [{\n    json: {\n      status: \"No results found\",\n      startIndex: nextStartIndex,\n      hasMoreResults: false,\n      search_company: companyName,\n      search_region: region,\n      timestamp: new Date().toISOString()\n    }\n  }];\n}\n\n// Enhanced phone number regex patterns\nconst phonePatterns = [\n  /\\+[\\d\\s]{10,15}/g,\n  /\\(?\\d{3}\\)?[-.\\s]?\\d{3}[-.\\s]?\\d{3}[-.\\s]?\\d{4}/g,\n  /\\d{2}[\\s.]?\\d{2}[\\s.]?\\d{2}[\\s.]?\\d{2}[\\s.]?\\d{2}/g,\n  /\\d{3}[\\s.-]\\d{3}[\\s.-]\\d{4}/g,\n  /\\d{4}[\\s.-]\\d{3}[\\s.-]\\d{3}/g,\n  /(mobile|mob|tel|phone)[:\\s]*([+\\d][\\d\\s\\-().]{7,})/gi\n];\n\nconst emailRegex = /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}/g;\n\nconst results = items.map(item => {\n  const titleParts = item.title?.split(/ - | at | \\| /) || [];\n  const name = titleParts[0]?.trim() || '';\n  let position = titleParts.length > 1 ? titleParts[1] : '';\n  \n  position = position\n    .replace(/ at LinkedIn/i, '')\n    .replace(new RegExp(` at ${companyName}`, 'i'), '')\n    .replace(/^[\\W_]+|[\\W_]+$/g, '')\n    .trim();\n  \n  const phones = new Set();\n  \n  if (item.snippet) {\n    phonePatterns.forEach(pattern => {\n      const matches = item.snippet.match(pattern) || [];\n      matches.forEach(match => {\n        const cleanPhone = match\n          .replace(/[^\\d+]/g, '')\n          .replace(/\\s+/g, '')\n          .trim();\n        \n        if (cleanPhone.replace(/\\D/g, '').length >= 7) {\n          phones.add(cleanPhone);\n        }\n      });\n    });\n  }\n  \n  const emails = item.snippet?.match(emailRegex) || [];\n  \n  return {\n    full_name: name,\n    exact_position: position,\n    linkedin_url: item.link || '',\n    profile_snippet: item.snippet || '',\n    search_company: companyName,\n    search_region: region,\n    phone_numbers: Array.from(phones).join('; ') || '',\n    hasMoreResults: hasMoreResults,\n    timestamp: new Date().toISOString()\n  };\n});\n\nreturn results.map(r => ({ json: r }));"
+      },
+      "name": "Process Profiles1",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -6768,
+        3920
+      ],
+      "id": "93831ad9-6f32-46bc-84fa-58a13d014228",
+      "notes": "Traite les profils LinkedIn trouvés:\n1. Extrait le nom et poste depuis le titre\n2. Nettoie le poste (enlève 'at LinkedIn' et le nom de l'entreprise)\n3. Extrait les numéros de téléphone avec plusieurs regex\n4. Extrait les emails trouvés dans le snippet\n5. Gère la pagination (détermine s'il y a plus de résultats)\n6. Ajoute des métadonnées (entreprise recherchée, région, timestamp)"
+    },
+    {
+      "parameters": {
+        "jsCode": "return $input.all().map(item => {\n  const profile = item.json;\n  if (!profile.full_name) return { json: profile };\n  \n  const nameParts = profile.full_name.split(/[\\s,]+/).filter(part => part.trim() !== '');\n  let firstName = '';\n  let lastName = '';\n  \n  if (nameParts.length === 1) {\n    firstName = nameParts[0];\n  } else if (nameParts.length > 1) {\n    const titles = ['Mr', 'Ms', 'Mrs', 'Dr', 'Prof'];\n    const suffixes = ['Jr', 'Sr', 'II', 'III', 'IV', 'PhD', 'MBA'];\n    \n    let startIdx = titles.includes(nameParts[0].replace(/\\./g, '')) ? 1 : 0;\n    \n    firstName = nameParts[startIdx];\n    lastName = nameParts.slice(startIdx + 1).join(' ');\n    \n    const lastPart = nameParts[nameParts.length - 1];\n    if (suffixes.includes(lastPart.replace(/\\./g, ''))) {\n      lastName = lastName.replace(new RegExp(`\\\\s*${lastPart}\\\\s*$`), '');\n    }\n  }\n  \n  const cleanName = (str) => {\n    if (!str) return '';\n    return str\n      .replace(/[^\\p{L}\\s-]/gu, '')\n      .replace(/\\s+/g, ' ')\n      .trim()\n      .split(' ')\n      .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())\n      .join(' ');\n  };\n  \n  return {\n    json: {\n      ...profile,\n      clean_first_name: cleanName(firstName),\n      clean_last_name: cleanName(lastName),\n      name_quality: nameParts.length > 1 ? 'complete' : 'partial'\n    }\n  };\n});"
+      },
+      "name": "Clean Names1",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -6560,
+        3920
+      ],
+      "id": "d3de924d-fd12-43fd-838b-37f46bf56c8e",
+      "notes": "Nettoie et sépare les noms complets:\n1. Sépare prénom et nom\n2. Gère les titres (Mr, Dr) et suffixes (Jr, PhD)\n3. Nettoie les caractères spéciaux et uniformise la casse\n4. Évalue la qualité du nom (complet/partiel)\n5. Crée des champs clean_first_name et clean_last_name standardisés"
+    },
+    {
+      "parameters": {
+        "batchSize": 100,
+        "options": {}
+      },
+      "name": "SplitInBatches",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 1,
+      "position": [
+        -6304,
+        3904
+      ],
+      "id": "fc9db069-c1f9-4948-b0ec-b48617178a70",
+      "notes": "Divise les résultats en lots de 100 profils pour:\n1. Éviter de surcharger les APIs suivantes\n2. Permettre un traitement parallèle\n3. Faciliter le débogage en cas d'erreur"
+    },
+    {
+      "parameters": {},
+      "name": "Delay",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        -6064,
+        3904
+      ],
+      "id": "2cafacb9-9be4-4bd0-bfba-822f20f41c08",
+      "webhookId": "2609d5fa-0324-4523-8241-f27e731ca416",
+      "notes": "Pause entre les requêtes pour:\n1. Respecter les limites de taux de l'API Google\n2. Éviter le blocage par LinkedIn\n3. Simuler un comportement humain"
+    },
+    {
+      "parameters": {
+        "jsCode": "function generateEmails(firstName, lastName, company) {\n  if (!firstName || !lastName) return [];\n  \n  const cleanCompany = (company || '').toLowerCase().replace(/[^a-z0-9-]/g, '');\n  const domains = [];\n  \n  if (cleanCompany) {\n    domains.push(\n      `${cleanCompany}.com`,\n      `${cleanCompany}.net`,\n      `${cleanCompany}.org`,\n      `${cleanCompany}-group.com`,\n      `${cleanCompany}-holding.com`,\n      `${cleanCompany}-inc.com`,\n      `${cleanCompany}-llc.com`\n    );\n    \n    const region = $node[\"Set Parameters1\"].json.region || '';\n    if (region.includes('France')) domains.push(`${cleanCompany}.fr`);\n    if (region.includes('Germany')) domains.push(`${cleanCompany}.de`);\n    if (region.includes('UK')) domains.push(`${cleanCompany}.co.uk`);\n  }\n  \n  domains.push('gmail.com', 'yahoo.com', 'outlook.com', 'hotmail.com', 'icloud.com');\n  \n  const patterns = [];\n  const firstInitial = firstName.charAt(0).toLowerCase();\n  const lastInitial = lastName.charAt(0).toLowerCase();\n  \n  domains.forEach(domain => {\n    patterns.push(\n      `${firstName.toLowerCase()}.${lastName.toLowerCase()}@${domain}`,\n      `${firstName.toLowerCase()}${lastInitial}@${domain}`,\n      `${firstInitial}${lastName.toLowerCase()}@${domain}`,\n      `${firstName.toLowerCase()}@${domain}`,\n      `${firstInitial}.${lastName.toLowerCase()}@${domain}`,\n      `${lastName.toLowerCase()}.${firstName.toLowerCase()}@${domain}`,\n      `${lastName.toLowerCase()}${firstInitial}@${domain}`\n    );\n  });\n  \n  return [...new Set(patterns)];\n}\n\nfunction validateEmail(email) {\n  if (!email) return { valid: false };\n  \n  if (!/^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/.test(email)) return { valid: false };\n  \n  const disposable = [\n    'mailinator.com', 'tempmail.com', '10minutemail.com',\n    'guerrillamail.com', 'throwawaymail.com', 'temp-mail.org'\n  ];\n  \n  const domain = email.split('@')[1].toLowerCase();\n  if (disposable.includes(domain)) return { valid: false };\n  \n  return { valid: true };\n}\n\nreturn $input.all().map(item => {\n  const profile = item.json;\n  if (!profile.clean_first_name || !profile.clean_last_name) return { json: profile };\n  \n  let bestEmail = '';\n  if (profile.snippet_emails) {\n    const emails = profile.snippet_emails.split(';');\n    for (const email of emails) {\n      if (validateEmail(email.trim()).valid) {\n        bestEmail = email.trim();\n        break;\n      }\n    }\n  }\n  \n  const generatedEmails = bestEmail ? [] : generateEmails(\n    profile.clean_first_name,\n    profile.clean_last_name,\n    $node[\"Set Parameters1\"].json.companyName\n  );\n  \n  if (!bestEmail) {\n    for (const email of generatedEmails) {\n      if (validateEmail(email).valid) {\n        bestEmail = email;\n        break;\n      }\n    }\n  }\n  \n  return {\n    json: {\n      ...profile,\n      email: bestEmail,\n      email_source: bestEmail ? \n        (profile.snippet_emails?.includes(bestEmail) ? 'snippet' : 'generated') : \n        'none',\n      email_patterns_tried: generatedEmails.join('; ')\n    }\n  };\n});"
+      },
+      "name": "Free Email Finder",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -5744,
+        3904
+      ],
+      "id": "aee06f9c-799d-4679-ba36-d0a702303d4a",
+      "notes": "Génère et valide des emails basés sur:\n1. D'abord utilise les emails trouvés dans le snippet\n2. Sinon génère des combinaisons prénom/nom/entreprise\n3. Supporte différents domaines selon la région (.fr, .de, etc.)\n4. Filtre les emails jetables/invalides\n5. Enregistre la source de l'email (trouvé vs généré)"
+    },
+    {
+      "parameters": {
+        "jsCode": "return items.map(item => {\n  const name = item.json.clean_first_name + \" \" + item.json.clean_last_name;\n  const title = item.json.exact_position || item.json.title || '';\n  const snippet = item.json.profile_snippet || '';\n  const url = item.json.linkedin_url || item.json.link || '';\n  const email = item.json.email || '';\n  const now = new Date();\n  \n  let startDate = '';\n  let duration = '';\n\n  const startMatch = snippet.match(/(?:since|from|depuis)\\s+(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec|\\d{4})[a-z]*\\s*(\\d{4})?/i);\n  if (startMatch) {\n    const month = isNaN(startMatch[1]) ? startMatch[1] : 'Jan';\n    const year = startMatch[2] || startMatch[1];\n    startDate = `${month} ${year}`;\n    try {\n      const dateObj = new Date(`${month} 1, ${year}`);\n      const months = Math.floor((now.getTime() - dateObj.getTime()) / (1000 * 60 * 60 * 24 * 30));\n      duration = `${Math.floor(months / 12)} yrs ${months % 12} mos`;\n    } catch {}\n  }\n\n  return {\n    json: {\n      name,\n      title,\n      snippet,\n      url,\n      email,\n      startDate,\n      duration,\n      search_company: item.json.search_company, \n      search_region: item.json.search_region \n    }\n  }\n});"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -5456,
+        3920
+      ],
+      "id": "c49b7334-4137-4469-a140-383f830bee40",
+      "name": "Format Results1",
+      "notes": "Formate les résultats finaux pour l'export:\n1. Combine prénom et nom nettoyés\n2. Extrait la date de début et calcule la durée dans le poste\n3. Structure les données pour la feuille Google\n4. Conserve les métadonnées de recherche (entreprise, région)"
+    },
+    {
+      "parameters": {
+        "jsCode": "const currentBatch = $input.all().map(item => item.json);\nconst existingResults = $node[\"Set Parameters1\"].json.allResults || [];\n\n// Merge current batch with existing results\nconst allResults = [...existingResults, ...currentBatch];\n\n// Add company information to each result\nconst companyInfo = {\n  companyName: $node[\"Set Parameters1\"].json.companyName,\n  region: $node[\"Set Parameters1\"].json.region,\n  allCompanies: $node[\"Set Parameters1\"].json.allCompanies\n};\n\nreturn currentBatch.map(item => ({\n  json: {\n    ...item,\n    ...companyInfo,\n    allResults: allResults\n  }\n}));"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -5152,
+        4032
+      ],
+      "id": "cb8865c6-231a-482a-b217-02ef34083d1a",
+      "name": "Collect Results",
+      "notes": "Agrège tous les résultats:\n1. Fusionne les résultats du lot actuel avec les précédents\n2. Ajoute les informations de l'entreprise à chaque résultat\n3. Garde une trace de tous les résultats pour le rapport final"
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "value": "13wyfHaoqV0QBNc9D5oEdloT1FhcI3d-ngtq_8Wed1GM",
+          "mode": "list",
+          "cachedResultName": "profiles emplyee company",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/13wyfHaoqV0QBNc9D5oEdloT1FhcI3d-ngtq_8Wed1GM/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": 1142911768,
+          "mode": "list",
+          "cachedResultName": "v1.3 multi csv",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/13wyfHaoqV0QBNc9D5oEdloT1FhcI3d-ngtq_8Wed1GM/edit#gid=1142911768"
+        },
+        "columns": {
+          "mappingMode": "autoMapInputData",
+          "value": {},
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "full_name",
+              "displayName": "full_name",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "exact_position",
+              "displayName": "exact_position",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "linkedin_url",
+              "displayName": "linkedin_url",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "profile_snippet",
+              "displayName": "profile_snippet",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "search_company",
+              "displayName": "search_company",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "search_region",
+              "displayName": "search_region",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "phone_numbers",
+              "displayName": "phone_numbers",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "hasMoreResults",
+              "displayName": "hasMoreResults",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "timestamp",
+              "displayName": "timestamp",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "clean_first_name",
+              "displayName": "clean_first_name",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "clean_last_name",
+              "displayName": "clean_last_name",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "name_quality",
+              "displayName": "name_quality",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "email",
+              "displayName": "email",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "email_source",
+              "displayName": "email_source",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "email_patterns_tried",
+              "displayName": "email_patterns_tried",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "allResults",
+              "displayName": "allResults",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "name": "Save to Google Sheets1",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [
+        -5136,
+        4368
+      ],
+      "id": "1b28c31c-d4a3-4fc8-9593-47c92b42ceca",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "HE6N92CyVizGyp5P",
+          "name": "Google Sheets account"
+        }
+      },
+      "notes": "Sauvegarde les résultats dans Google Sheets:\n- Ajoute les nouvelles lignes sans écraser les existantes\n- Mappe automatiquement les champs aux colonnes\n- Utilise l'API Google Sheets avec authentification OAuth2\n- Cible une feuille spécifique dans le document"
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={\n  \"status\": \"success\",\n  \"message\": \"Processing complete!\",\n  \"totalCompanies\": {{ $json.allCompanies.length }},\n  \"totalProfiles\": {{ $input.all().length }},\n  \"timestamp\": \"{{ new Date().toISOString() }}\"\n}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.4,
+      "position": [
+        -4640,
+        4368
+      ],
+      "id": "f1db5a11-d64c-4c84-837c-3d1fcef97344",
+      "name": "Respond to Webhook",
+      "notes": "Envoie une réponse JSON au webhook initial:\n- Confirme la réussite du traitement\n- Donne des stats (nb entreprises traitées, nb profils trouvés)\n- Inclut un timestamp pour le suivi"
+    },
+    {
+      "parameters": {
+        "content": "## Point d'entrée du workflow - Reçoit les données POST contenant la liste des entreprises à rechercher. Attend un tableau d'objets avec les champs: Company Name, Region, et Max Results.\n",
+        "height": 272,
+        "width": 320,
+        "color": 5
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        -8112,
+        3648
+      ],
+      "typeVersion": 1,
+      "id": "bd552cb6-3cf8-4aa2-b754-80841880c2d4",
+      "name": "Sticky Note"
+    },
+    {
+      "parameters": {
+        "content": "## Traite les données d'entrée:  \n\n1. Normalise la structure des données (peut venir de différentes sources)\n2. Valide que c'est un tableau d'entreprises\n3. Crée un objet standardisé pour chaque entreprise avec: nom, région, max résultats\n4. Initialise les paramètres de pagination (startIndex=1)",
+        "height": 256,
+        "width": 512
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        -7504,
+        3456
+      ],
+      "typeVersion": 1,
+      "id": "7d7f7c80-9b89-4d0e-9af8-b2347db09678",
+      "name": "Sticky Note1"
+    },
+    {
+      "parameters": {
+        "content": "## Définit les paramètres globaux du workflow: \n\n- Nom de l'entreprise et région pour la recherche\n- Paramètres de pagination (maxResults, currentStartIndex)\n- Stocke la liste complète des entreprises (allCompanies)\n- Initialise le tableau pour collecter tous les résultats (allResults)",
+        "height": 176,
+        "width": 528
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        -7568,
+        4080
+      ],
+      "typeVersion": 1,
+      "id": "2380404e-278c-4740-ae70-d3e6e7152ce7",
+      "name": "Sticky Note2"
+    },
+    {
+      "parameters": {
+        "content": "## Effectue la recherche sur LinkedIn via Google Custom Search API: \n\n- Combine nom entreprise + région + 'site:linkedin.com/in'\n- Gère la pagination (paramètres start et num)\n- Limite à 10 résultats par requête (max de l'API)\n- Utilise les credentials Google API (key et cx)",
+        "height": 224,
+        "width": 480,
+        "color": 3
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        -7072,
+        3680
+      ],
+      "typeVersion": 1,
+      "id": "e20c6323-3408-4d1e-82d9-186bfb41dc87",
+      "name": "Sticky Note3"
+    },
+    {
+      "parameters": {
+        "content": "## Traite les profils LinkedIn trouvés:\n1. Extrait le nom et poste depuis le titre\n2. Nettoie le poste (enlève 'at LinkedIn' et le nom de l'entreprise)\n3. Extrait les numéros de téléphone avec plusieurs regex\n4. Extrait les emails trouvés dans le snippet\n5. Gère la pagination (détermine s'il y a plus de résultats)\n6. Ajoute des métadonnées (entreprise recherchée, région, timestamp)",
+        "height": 304,
+        "width": 320
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        -6832,
+        4080
+      ],
+      "typeVersion": 1,
+      "id": "234a93f7-23c0-4aab-9e01-7c950bd8e894",
+      "name": "Sticky Note4"
+    },
+    {
+      "parameters": {
+        "content": "## Nettoie et sépare les noms complets:\n1. Sépare prénom et nom\n2. Gère les titres (Mr, Dr) et suffixes (Jr, PhD)\n3. Nettoie les caractères spéciaux et uniformise la casse\n4. Évalue la qualité du nom (complet/partiel)\n5. Crée des champs clean_first_name et clean_last_name standardisés",
+        "height": 496,
+        "width": 176
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        -6384,
+        3376
+      ],
+      "typeVersion": 1,
+      "id": "99a68e43-8f59-4c89-bcd3-40eca722c9ff",
+      "name": "Sticky Note5"
+    },
+    {
+      "parameters": {
+        "content": "Divise les résultats en lots de 100 profils pour:\n1. Éviter de surcharger les APIs suivantes\n2. Permettre un traitement parallèle\n3. Faciliter le débogage en cas d'erreur",
+        "height": 320,
+        "width": 150,
+        "color": 4
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        -6384,
+        4080
+      ],
+      "typeVersion": 1,
+      "id": "98e064e6-9faa-4089-881b-32c21f50203c",
+      "name": "Sticky Note6"
+    },
+    {
+      "parameters": {
+        "content": "Pause entre les requêtes pour:\n1. Respecter les limites de taux de l'API Google\n2. Éviter le blocage par LinkedIn\n3. Simuler un comportement humain",
+        "height": 240,
+        "width": 150,
+        "color": 3
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        -6080,
+        3632
+      ],
+      "typeVersion": 1,
+      "id": "d1716086-4e07-4446-b77f-018e9005c4ba",
+      "name": "Sticky Note7"
+    },
+    {
+      "parameters": {
+        "content": "## Génère et valide des emails basés sur:\n1. D'abord utilise les emails trouvés dans le snippet\n2. Sinon génère des combinaisons prénom/nom/entreprise\n3. Supporte différents domaines selon la région (.fr, .de, etc.)\n4. Filtre les emails jetables/invalides\n5. Enregistre la source de l'email (trouvé vs généré)",
+        "height": 272,
+        "width": 336
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        -5888,
+        4064
+      ],
+      "typeVersion": 1,
+      "id": "249ebc6d-7be5-4c08-88b5-5ff685b74dec",
+      "name": "Sticky Note8"
+    },
+    {
+      "parameters": {
+        "content": "## Formate les résultats finaux pour l'export:\n1. Combine prénom et nom nettoyés\n2. Extrait la date de début et calcule la durée dans le poste\n3. Structure les données pour la feuille Google\n4. Conserve les métadonnées de recherche (entreprise, région)",
+        "height": 208,
+        "width": 336,
+        "color": 6
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        -5488,
+        3680
+      ],
+      "typeVersion": 1,
+      "id": "30e4da07-2652-4467-a844-3b7277977a84",
+      "name": "Sticky Note9"
+    },
+    {
+      "parameters": {
+        "content": "## Agrège tous les résultats:\n1. Fusionne les résultats du lot actuel avec les précédents\n2. Ajoute les informations de l'entreprise à chaque résultat\n3. Garde une trace de tous les résultats pour le rapport final",
+        "height": 176,
+        "width": 352
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        -4960,
+        4000
+      ],
+      "typeVersion": 1,
+      "id": "e03ba126-4ac6-4382-b128-9b2ff9549e8b",
+      "name": "Sticky Note10"
+    },
+    {
+      "parameters": {
+        "content": "## Sauvegarde les résultats dans Google Sheets:\n- Ajoute les nouvelles lignes sans écraser les existantes\n- Mappe automatiquement les champs aux colonnes\n- Utilise l'API Google Sheets avec authentification OAuth2\n- Cible une feuille spécifique dans le document",
+        "height": 240,
+        "width": 352
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        -5232,
+        4528
+      ],
+      "typeVersion": 1,
+      "id": "223c1d6d-f3ca-4a64-8e42-dd04f40b35b8",
+      "name": "Sticky Note11"
+    },
+    {
+      "parameters": {
+        "content": "## Envoie une réponse JSON au webhook initial:\n- Confirme la réussite du traitement\n- Donne des stats (nb entreprises traitées, nb profils trouvés)\n- Inclut un timestamp pour le suivi",
+        "width": 384,
+        "color": 5
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        -4432,
+        4352
+      ],
+      "typeVersion": 1,
+      "id": "7c54db33-c592-4c18-b310-92a0ff83f117",
+      "name": "Sticky Note12"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Webhook1": {
+      "main": [
+        [
+          {
+            "node": "Process Input1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Process Input1": {
+      "main": [
+        [
+          {
+            "node": "Set Parameters1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Set Parameters1": {
+      "main": [
+        [
+          {
+            "node": "Search LinkedIn Profiles1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Search LinkedIn Profiles1": {
+      "main": [
+        [
+          {
+            "node": "Process Profiles1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Process Profiles1": {
+      "main": [
+        [
+          {
+            "node": "Clean Names1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Clean Names1": {
+      "main": [
+        [
+          {
+            "node": "SplitInBatches",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "SplitInBatches": {
+      "main": [
+        [
+          {
+            "node": "Delay",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Delay": {
+      "main": [
+        [
+          {
+            "node": "Free Email Finder",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Free Email Finder": {
+      "main": [
+        [
+          {
+            "node": "Format Results1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format Results1": {
+      "main": [
+        [
+          {
+            "node": "Collect Results",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Collect Results": {
+      "main": [
+        [
+          {
+            "node": "Save to Google Sheets1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Save to Google Sheets1": {
+      "main": [
+        [
+          {
+            "node": "Respond to Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "807a7293-e9db-4d24-9227-2d98b7c6dfe2",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "ed11c1c1a4b5d1be86a8f9323707f124418d649860465bb4415c1bafa4c2d870"
+  },
+  "id": "3vu31TfKZ5h3xyu4",
+  "tags": []
+}
